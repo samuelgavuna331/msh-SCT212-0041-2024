@@ -18,7 +18,6 @@ int main(void)
         printf("msh> ");
         fflush(stdout);
 
-        /* Task 1: Read unlimited input */
         length = getline(&line, &capacity, stdin);
 
         if (length == -1)
@@ -30,11 +29,9 @@ int main(void)
             }
 
             perror("getline");
-            free(line);
-            return EXIT_FAILURE;
+            break;
         }
 
-        /* Task 2: Prepare argument array */
         size_t arg_capacity = 8;
         size_t argc = 0;
 
@@ -43,11 +40,9 @@ int main(void)
         if (argv == NULL)
         {
             perror("malloc");
-            free(line);
-            return EXIT_FAILURE;
+            break;
         }
 
-        /* Split input into arguments */
         char *token = strtok(line, " \t\n");
 
         while (token != NULL)
@@ -72,28 +67,85 @@ int main(void)
                 argv = temp;
             }
 
-            argv[argc] = token;
-            argc++;
-
+            argv[argc++] = token;
             token = strtok(NULL, " \t\n");
         }
 
-        /* NULL terminate argv */
         argv[argc] = NULL;
 
-        /* Ignore blank lines */
         if (argc == 0)
         {
             free(argv);
             continue;
         }
 
-        /* Task 3: Create a child process */
+        /* TASK 4: cd built-in */
+        if (strcmp(argv[0], "cd") == 0)
+        {
+            if (argc > 2)
+            {
+                fprintf(stderr, "msh: cd: too many arguments\n");
+            }
+            else
+            {
+                const char *directory;
+
+                if (argc == 1)
+                {
+                    directory = getenv("HOME");
+
+                    if (directory == NULL)
+                    {
+                        fprintf(stderr, "msh: cd: HOME not set\n");
+                        free(argv);
+                        continue;
+                    }
+                }
+                else
+                {
+                    directory = argv[1];
+                }
+
+                if (chdir(directory) == -1)
+                {
+                    perror("msh: cd");
+                }
+            }
+
+            free(argv);
+            continue;
+        }
+
+        /* TASK 4: help built-in */
+        if (strcmp(argv[0], "help") == 0)
+        {
+            printf("\n");
+            printf("========== MSH HELP ==========\n");
+            printf("Built-in commands:\n");
+            printf("  cd [dir]  Change directory\n");
+            printf("  help      Display help\n");
+            printf("  exit      Exit the shell\n");
+            printf("\nExternal commands use fork(), execvp(), and waitpid().\n");
+            printf("==============================\n\n");
+
+            free(argv);
+            continue;
+        }
+
+        /* TASK 4: exit built-in */
+        if (strcmp(argv[0], "exit") == 0)
+        {
+            printf("Goodbye!\n");
+            free(argv);
+            free(line);
+            return EXIT_SUCCESS;
+        }
+
+        /* TASK 3: Execute external commands */
         pid_t pid = fork();
 
         if (pid < 0)
         {
-            /* Fork failed */
             perror("fork");
             free(argv);
             continue;
@@ -101,37 +153,32 @@ int main(void)
 
         if (pid == 0)
         {
-            /* Child process: execute command */
             execvp(argv[0], argv);
 
-            /* Reached only if execvp fails */
             perror(argv[0]);
-
             _exit(127);
         }
         else
         {
-            /* Parent process: wait for child */
             int status;
+            pid_t result;
 
-            while (waitpid(pid, &status, 0) == -1)
+            do
             {
-                if (errno == EINTR)
-                {
-                    continue;
-                }
+                result = waitpid(pid, &status, 0);
+            }
+            while (result == -1 && errno == EINTR);
 
+            if (result == -1)
+            {
                 perror("waitpid");
-                break;
             }
         }
 
         free(argv);
     }
 
-    /* Release input memory */
     free(line);
-
     return EXIT_SUCCESS;
 }
 
