@@ -3,6 +3,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#include <errno.h>
 
 int main(void)
 {
@@ -15,7 +18,7 @@ int main(void)
         printf("msh> ");
         fflush(stdout);
 
-        /* Read a complete command line */
+        /* Task 1: Read unlimited input */
         length = getline(&line, &capacity, stdin);
 
         if (length == -1)
@@ -31,7 +34,7 @@ int main(void)
             return EXIT_FAILURE;
         }
 
-        /* Allocate memory for argument pointers */
+        /* Task 2: Prepare argument array */
         size_t arg_capacity = 8;
         size_t argc = 0;
 
@@ -44,12 +47,11 @@ int main(void)
             return EXIT_FAILURE;
         }
 
-        /* Split the command using spaces, tabs and newline */
+        /* Split input into arguments */
         char *token = strtok(line, " \t\n");
 
         while (token != NULL)
         {
-            /* Increase argument array when necessary */
             if (argc + 1 >= arg_capacity)
             {
                 arg_capacity *= 2;
@@ -76,25 +78,58 @@ int main(void)
             token = strtok(NULL, " \t\n");
         }
 
-        /* Terminate argument array with NULL */
+        /* NULL terminate argv */
         argv[argc] = NULL;
 
-        /* Display parsed command for testing */
-        if (argc > 0)
+        /* Ignore blank lines */
+        if (argc == 0)
         {
-            printf("Command: %s\n", argv[0]);
+            free(argv);
+            continue;
+        }
 
-            for (size_t i = 1; i < argc; i++)
+        /* Task 3: Create a child process */
+        pid_t pid = fork();
+
+        if (pid < 0)
+        {
+            /* Fork failed */
+            perror("fork");
+            free(argv);
+            continue;
+        }
+
+        if (pid == 0)
+        {
+            /* Child process: execute command */
+            execvp(argv[0], argv);
+
+            /* Reached only if execvp fails */
+            perror(argv[0]);
+
+            _exit(127);
+        }
+        else
+        {
+            /* Parent process: wait for child */
+            int status;
+
+            while (waitpid(pid, &status, 0) == -1)
             {
-                printf("Argument %zu: %s\n", i, argv[i]);
+                if (errno == EINTR)
+                {
+                    continue;
+                }
+
+                perror("waitpid");
+                break;
             }
         }
 
-        /* Release argument pointer array */
         free(argv);
     }
 
-    /* Release input buffer */
+    /* Release input memory */
     free(line);
 
     return EXIT_SUCCESS;
