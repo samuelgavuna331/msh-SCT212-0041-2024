@@ -1,5 +1,4 @@
 
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,6 +6,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <sys/stat.h>
 
 /* TASK 6: Reap completed background processes */
 void reap_background_processes(void)
@@ -40,7 +41,7 @@ int main(void)
 
     while (1)
     {
-        /* TASK 6: Reap finished background processes */
+        /* TASK 6: Check completed background processes */
         reap_background_processes();
 
         printf("msh[%d]> ", last_status);
@@ -110,7 +111,7 @@ int main(void)
             continue;
         }
 
-        /* TASK 6: Detect trailing ampersand */
+        /* TASK 6: Detect background execution */
         int background = 0;
 
         if (strcmp(argv[argc - 1], "&") == 0)
@@ -124,6 +125,40 @@ int main(void)
         {
             free(argv);
             continue;
+        }
+
+        /* TASK 7: Detect output redirection */
+        int redirect_index = -1;
+        int redirect_count = 0;
+
+        for (size_t i = 0; i < argc; i++)
+        {
+            if (strcmp(argv[i], ">") == 0)
+            {
+                redirect_index = (int)i;
+                redirect_count++;
+            }
+        }
+
+        char *output_file = NULL;
+
+        if (redirect_count > 0)
+        {
+            if (redirect_count != 1 ||
+                redirect_index == 0 ||
+                redirect_index + 2 != (int)argc)
+            {
+                fprintf(stderr, "msh: invalid output redirection syntax\n");
+                last_status = 2;
+                free(argv);
+                continue;
+            }
+
+            output_file = argv[redirect_index + 1];
+
+            /* Remove > and filename from command arguments */
+            argv[redirect_index] = NULL;
+            argc = (size_t)redirect_index;
         }
 
         /* TASK 4: cd built-in */
@@ -196,7 +231,7 @@ int main(void)
             return EXIT_SUCCESS;
         }
 
-        /* TASK 3 and TASK 6: Create child process */
+        /* TASK 3: Create child process */
         pid_t pid = fork();
 
         if (pid < 0)
@@ -209,6 +244,39 @@ int main(void)
 
         if (pid == 0)
         {
+            /* TASK 7: Redirect child standard output */
+            if (output_file != NULL)
+            {
+                int fd = open(
+                    output_file,
+                    O_WRONLY | O_CREAT | O_TRUNC,
+                    0644
+                );
+
+                if (fd == -1)
+                {
+                    perror("msh: open");
+                    _exit(1);
+                }
+
+                if (fchmod(fd, 0644) == -1)
+                {
+                    perror("msh: fchmod");
+                    close(fd);
+                    _exit(1);
+                }
+
+                if (dup2(fd, STDOUT_FILENO) == -1)
+                {
+                    perror("msh: dup2");
+                    close(fd);
+                    _exit(1);
+                }
+
+                close(fd);
+            }
+
+            /* TASK 3: Execute external command */
             execvp(argv[0], argv);
 
             perror(argv[0]);
