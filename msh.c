@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <signal.h>
 
 /* TASK 6: Reap completed background processes */
 void reap_background_processes(void)
@@ -39,9 +40,22 @@ int main(void)
     /* TASK 5: Previous command exit status */
     int last_status = 0;
 
+    /* TASK 8: Make the shell ignore Ctrl+C */
+    struct sigaction shell_action;
+
+    memset(&shell_action, 0, sizeof(shell_action));
+    shell_action.sa_handler = SIG_IGN;
+    sigemptyset(&shell_action.sa_mask);
+
+    if (sigaction(SIGINT, &shell_action, NULL) == -1)
+    {
+        perror("sigaction");
+        return EXIT_FAILURE;
+    }
+
     while (1)
     {
-        /* TASK 6: Check completed background processes */
+        /* TASK 6: Reap completed background processes */
         reap_background_processes();
 
         printf("msh[%d]> ", last_status);
@@ -55,6 +69,13 @@ int main(void)
             {
                 printf("\nGoodbye!\n");
                 break;
+            }
+
+            if (errno == EINTR)
+            {
+                clearerr(stdin);
+                printf("\n");
+                continue;
             }
 
             perror("getline");
@@ -148,7 +169,8 @@ int main(void)
                 redirect_index == 0 ||
                 redirect_index + 2 != (int)argc)
             {
-                fprintf(stderr, "msh: invalid output redirection syntax\n");
+                fprintf(stderr,
+                        "msh: invalid output redirection syntax\n");
                 last_status = 2;
                 free(argv);
                 continue;
@@ -156,7 +178,6 @@ int main(void)
 
             output_file = argv[redirect_index + 1];
 
-            /* Remove > and filename from command arguments */
             argv[redirect_index] = NULL;
             argc = (size_t)redirect_index;
         }
@@ -244,6 +265,19 @@ int main(void)
 
         if (pid == 0)
         {
+            /* TASK 8: Restore normal Ctrl+C behaviour in child */
+            struct sigaction child_action;
+
+            memset(&child_action, 0, sizeof(child_action));
+            child_action.sa_handler = SIG_DFL;
+            sigemptyset(&child_action.sa_mask);
+
+            if (sigaction(SIGINT, &child_action, NULL) == -1)
+            {
+                perror("msh: sigaction");
+                _exit(1);
+            }
+
             /* TASK 7: Redirect child standard output */
             if (output_file != NULL)
             {
@@ -290,7 +324,7 @@ int main(void)
         }
         else
         {
-            /* TASK 3 and TASK 5: Wait for foreground process */
+            /* TASK 3, 5 and 8: Wait for foreground process */
             int status;
             pid_t result;
 
