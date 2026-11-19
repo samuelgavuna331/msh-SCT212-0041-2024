@@ -1,4 +1,5 @@
 
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,18 +8,41 @@
 #include <unistd.h>
 #include <errno.h>
 
+/* TASK 6: Reap completed background processes */
+void reap_background_processes(void)
+{
+    int status;
+    pid_t pid;
+
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0)
+    {
+        if (WIFEXITED(status))
+        {
+            printf("\n[Background] Process %d finished with status %d\n",
+                   pid, WEXITSTATUS(status));
+        }
+        else if (WIFSIGNALED(status))
+        {
+            printf("\n[Background] Process %d terminated by signal %d\n",
+                   pid, WTERMSIG(status));
+        }
+    }
+}
+
 int main(void)
 {
     char *line = NULL;
     size_t capacity = 0;
     ssize_t length;
 
-    /* TASK 5: Store the previous command's exit status */
+    /* TASK 5: Previous command exit status */
     int last_status = 0;
 
     while (1)
     {
-        /* Display the previous command's status */
+        /* TASK 6: Reap finished background processes */
+        reap_background_processes();
+
         printf("msh[%d]> ", last_status);
         fflush(stdout);
 
@@ -79,6 +103,22 @@ int main(void)
         }
 
         argv[argc] = NULL;
+
+        if (argc == 0)
+        {
+            free(argv);
+            continue;
+        }
+
+        /* TASK 6: Detect trailing ampersand */
+        int background = 0;
+
+        if (strcmp(argv[argc - 1], "&") == 0)
+        {
+            background = 1;
+            argc--;
+            argv[argc] = NULL;
+        }
 
         if (argc == 0)
         {
@@ -156,7 +196,7 @@ int main(void)
             return EXIT_SUCCESS;
         }
 
-        /* TASK 3: Create child process */
+        /* TASK 3 and TASK 6: Create child process */
         pid_t pid = fork();
 
         if (pid < 0)
@@ -174,8 +214,15 @@ int main(void)
             perror(argv[0]);
             _exit(127);
         }
+        else if (background)
+        {
+            /* TASK 6: Do not wait for background process */
+            printf("[Background] Started process with PID %d\n", pid);
+            last_status = 0;
+        }
         else
         {
+            /* TASK 3 and TASK 5: Wait for foreground process */
             int status;
             pid_t result;
 
@@ -190,17 +237,13 @@ int main(void)
                 perror("waitpid");
                 last_status = 1;
             }
-            else
+            else if (WIFEXITED(status))
             {
-                /* TASK 5: Interpret child termination status */
-                if (WIFEXITED(status))
-                {
-                    last_status = WEXITSTATUS(status);
-                }
-                else if (WIFSIGNALED(status))
-                {
-                    last_status = 128 + WTERMSIG(status);
-                }
+                last_status = WEXITSTATUS(status);
+            }
+            else if (WIFSIGNALED(status))
+            {
+                last_status = 128 + WTERMSIG(status);
             }
         }
 
@@ -210,4 +253,3 @@ int main(void)
     free(line);
     return EXIT_SUCCESS;
 }
-
