@@ -13,9 +13,13 @@ int main(void)
     size_t capacity = 0;
     ssize_t length;
 
+    /* TASK 5: Store the previous command's exit status */
+    int last_status = 0;
+
     while (1)
     {
-        printf("msh> ");
+        /* Display the previous command's status */
+        printf("msh[%d]> ", last_status);
         fflush(stdout);
 
         length = getline(&line, &capacity, stdin);
@@ -29,9 +33,11 @@ int main(void)
             }
 
             perror("getline");
-            break;
+            free(line);
+            return EXIT_FAILURE;
         }
 
+        /* TASK 2: Parse command arguments */
         size_t arg_capacity = 8;
         size_t argc = 0;
 
@@ -40,7 +46,8 @@ int main(void)
         if (argv == NULL)
         {
             perror("malloc");
-            break;
+            free(line);
+            return EXIT_FAILURE;
         }
 
         char *token = strtok(line, " \t\n");
@@ -85,6 +92,7 @@ int main(void)
             if (argc > 2)
             {
                 fprintf(stderr, "msh: cd: too many arguments\n");
+                last_status = 1;
             }
             else
             {
@@ -97,6 +105,7 @@ int main(void)
                     if (directory == NULL)
                     {
                         fprintf(stderr, "msh: cd: HOME not set\n");
+                        last_status = 1;
                         free(argv);
                         continue;
                     }
@@ -109,6 +118,11 @@ int main(void)
                 if (chdir(directory) == -1)
                 {
                     perror("msh: cd");
+                    last_status = 1;
+                }
+                else
+                {
+                    last_status = 0;
                 }
             }
 
@@ -128,6 +142,7 @@ int main(void)
             printf("\nExternal commands use fork(), execvp(), and waitpid().\n");
             printf("==============================\n\n");
 
+            last_status = 0;
             free(argv);
             continue;
         }
@@ -141,12 +156,13 @@ int main(void)
             return EXIT_SUCCESS;
         }
 
-        /* TASK 3: Execute external commands */
+        /* TASK 3: Create child process */
         pid_t pid = fork();
 
         if (pid < 0)
         {
             perror("fork");
+            last_status = 1;
             free(argv);
             continue;
         }
@@ -172,6 +188,19 @@ int main(void)
             if (result == -1)
             {
                 perror("waitpid");
+                last_status = 1;
+            }
+            else
+            {
+                /* TASK 5: Interpret child termination status */
+                if (WIFEXITED(status))
+                {
+                    last_status = WEXITSTATUS(status);
+                }
+                else if (WIFSIGNALED(status))
+                {
+                    last_status = 128 + WTERMSIG(status);
+                }
             }
         }
 
