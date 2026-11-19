@@ -49,8 +49,6 @@ Output redirection uses open() and dup2() in the child process. The shell ignore
 - No advanced job-control commands.
 
 ## Sources and Acknowledgements
-
-- ICS 2305 Systems Programming practical assignment.
-- Linux manual pages for getline(), strtok(), fork(), execvp(), waitpid(), open(), dup2(), and sigaction().
-- GCC and GNU Make documentation.
-- ChatGPT (OpenAI) was used for programming assistance, explanations, and debugging guidance.
+- Course notes from piazza and google classroom.
+- The instructios from ICS 2305 Systems Programming assignment. 
+- ChatGPT (OpenAI) was used for explanations, and debugging guidance.
